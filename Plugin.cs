@@ -1,13 +1,12 @@
 using System;
-using System.Collections.Generic;
 using System.Reflection;
 using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
 using HarmonyLib;
-using MaJiang.Bag;
 using MaJiang.PlayMaJiang;
+using MaJiang.PlayMaJiang.InOut;
 using MaJiang.PlayMaJiang.Player;
 using MaJiang.PlayMaJiang.Player.HuPai;
 
@@ -16,17 +15,15 @@ using MaJiang.PlayMaJiang.Player.HuPai;
  * DemonicMahjongMod — Focused Mod for Demonic Mahjong v2.70.0
  * Target: Unity 6000.3.21f1  |  BepInEx 6.0.0-be.793  |  TargetFramework net6.0
  *
- * FOCUSED MECHANICS:
- *  1. Draw per turn (ExtraDrawsPerTurn): Allows drawing/swapping more tiles in each action.
- *  2. Total draws   (ExtraTotalDraws / InfiniteDraws): Expands total draw/swap round budget.
- *  3. Hu slot       (BonusHuSlots): Expands the player's winning hand / Hu slots.
+ * STRICTLY FOCUSED MECHANICS:
+ *  1. ExtraDrawsPerTurn: Tiles drawn/swapped per turn action.
+ *  2. ExtraTotalDraws:   Total round draw/swap allowance.
+ *  3. BonusHuSlots:      Winning hand / Hu slots capacity.
  *
- * CRITICAL TECHNICAL CONSTRAINTS FOR UNITY 6000.3.21f1:
- *  1. DO NOT call ClassInjector.RegisterTypeInIl2Cpp() — it crashes due to missing Class::Init.
- *  2. DO NOT use AddComponent<T>() or custom MonoBehaviour injection.
- *  3. BepInEx.cfg should have [Logging.Unity] UnityLogListening = false.
- *  4. Rely purely on BasePlugin and HarmonyLib hooks targeting concrete game classes.
- *  5. Apply patches individually to guarantee resilience against any single patch issue.
+ * STABILITY GUARANTEES:
+ *  - NO GameManager or GlobalStaticDataManager MonoBehaviour hooks (avoids 0xc0000005 crash).
+ *  - NO ClassInjector or custom MonoBehaviour injection.
+ *  - Per-patch error isolation during initialization.
  * =========================================================================================
  */
 
@@ -49,7 +46,6 @@ namespace DemonicMahjongMod
             int successCount = 0;
             int totalCount = 0;
 
-            // Patch classes individually with per-patch error isolation
             foreach (var type in typeof(Plugin).Assembly.GetTypes())
             {
                 var patchAttr = type.GetCustomAttribute<HarmonyPatch>();
@@ -74,57 +70,38 @@ namespace DemonicMahjongMod
     }
 
     // =====================================================================================
-    //  Configuration
+    //  Configuration (STRICTLY ONLY THE 3 REQUESTED MECHANICS)
     // =====================================================================================
     internal class PluginConfig
     {
-        // ── 1. Draw Per Turn ─────────────────────────────────────────────────────────────
         public ConfigEntry<int> ExtraDrawsPerTurn { get; }
-
-        // ── 2. Total Draws ───────────────────────────────────────────────────────────────
-        public ConfigEntry<int>  ExtraTotalDraws { get; }
-        public ConfigEntry<bool> InfiniteDraws   { get; }
-        public ConfigEntry<int>  ExtraDeckTiles  { get; }
-
-        // ── 3. Hu Slots ──────────────────────────────────────────────────────────────────
+        public ConfigEntry<int> ExtraTotalDraws   { get; }
         public ConfigEntry<int> BonusHuSlots     { get; }
 
         internal PluginConfig(ConfigFile cfg)
         {
-            const string catDrawPerTurn = "1_DrawPerTurn";
-            const string catTotalDraws  = "2_TotalDraws";
-            const string catHuSlots     = "3_HuSlots";
+            const string cat = "Mechanics";
 
-            // 1. Draw Per Turn
-            ExtraDrawsPerTurn = cfg.Bind(catDrawPerTurn, "ExtraDrawsPerTurn", 2,
-                new ConfigDescription("Additional tiles drawn/swapped per turn action (boosts CanFetchNumber and DiscardSwap limits).",
+            ExtraDrawsPerTurn = cfg.Bind(cat, "ExtraDrawsPerTurn", 2,
+                new ConfigDescription("Additional tiles drawn/swapped per turn action.",
                     new AcceptableValueRange<int>(0, 10)));
 
-            // 2. Total Draws
-            ExtraTotalDraws = cfg.Bind(catTotalDraws, "ExtraTotalDraws", 5,
-                new ConfigDescription("Additional total draw/swap allowance granted for the round (boosts PlayerSwapPaiLeftCount and round turn budget).",
-                    new AcceptableValueRange<int>(0, 50)));
+            ExtraTotalDraws = cfg.Bind(cat, "ExtraTotalDraws", 20,
+                new ConfigDescription("Additional total draw/swap allowance for the round.",
+                    new AcceptableValueRange<int>(0, 100)));
 
-            InfiniteDraws = cfg.Bind(catTotalDraws, "InfiniteDraws", false,
-                new ConfigDescription("If true, remaining draw/swap count is locked and never decreases when swapping or drawing tiles."));
-
-            ExtraDeckTiles = cfg.Bind(catTotalDraws, "ExtraDeckTiles", 0,
-                new ConfigDescription("Extra tile capacity added to the wall/deck container (AllPaiMianContainer._fullCount) to prevent running out of tiles (0 = default).",
-                    new AcceptableValueRange<int>(0, 144)));
-
-            // 3. Hu Slots
-            BonusHuSlots = cfg.Bind(catHuSlots, "BonusHuSlots", 3,
-                new ConfigDescription("Additional winning hand / Hu slots available to the player (dynamically instantiates new HuPaiSlots and updates pipeline capacity).",
+            BonusHuSlots = cfg.Bind(cat, "BonusHuSlots", 2,
+                new ConfigDescription("Additional winning hand / Hu slots available to the player.",
                     new AcceptableValueRange<int>(0, 10)));
         }
     }
 
     // =====================================================================================
-    //  SECTION 1: Draw Per Turn Patches
+    //  MECHANIC 1: Draw Per Turn (ExtraDrawsPerTurn)
     // =====================================================================================
 
     /// <summary>
-    /// Increases the number of tiles the player is allowed to fetch during swap/draw (PlayerSwapPaiMianContainer.get_CanFetchNumber).
+    /// Expands the allowed fetch capacity in the swap tray.
     /// </summary>
     [HarmonyPatch(typeof(PlayerSwapPaiMianContainer), "get_CanFetchNumber")]
     internal static class Patch_PlayerSwapPaiMianContainer_CanFetchNumber
@@ -141,7 +118,7 @@ namespace DemonicMahjongMod
     }
 
     /// <summary>
-    /// Ensures CanFetchNumber is immediately boosted when swap phase starts (PlayerSwapPaiMianContainer.StartSwap).
+    /// Boosts active CanFetchNumber when swap phase begins.
     /// </summary>
     [HarmonyPatch(typeof(PlayerSwapPaiMianContainer), nameof(PlayerSwapPaiMianContainer.StartSwap))]
     internal static class Patch_PlayerSwapPaiMianContainer_StartSwap
@@ -166,7 +143,7 @@ namespace DemonicMahjongMod
     }
 
     /// <summary>
-    /// Prevents selection limit check from blocking multi-tile selections up to the boosted limit (PlayerSwapPaiMianContainer.IsLimitExceeded).
+    /// Prevents selection limit check from blocking multi-tile selections up to the boosted limit.
     /// </summary>
     [HarmonyPatch(typeof(PlayerSwapPaiMianContainer), nameof(PlayerSwapPaiMianContainer.IsLimitExceeded))]
     internal static class Patch_PlayerSwapPaiMianContainer_IsLimitExceeded
@@ -178,78 +155,68 @@ namespace DemonicMahjongMod
             if (bonus > 0 && count <= 1 + bonus)
             {
                 __result = false;
-                return false; // Skip original check, allow selection
+                return false;
             }
             return true;
         }
     }
 
     /// <summary>
-    /// Expands DiscardSwap._limitCount when swap UI is opened/activated (DiscardSwap.set_IsActive).
+    /// Increases tile fetch count in pipeline output when swap phase initiates.
     /// </summary>
-    [HarmonyPatch(typeof(DiscardSwap), "set_IsActive")]
-    internal static class Patch_DiscardSwap_SetIsActive
+    [HarmonyPatch(typeof(PlayerPipeline), nameof(PlayerPipeline.OnBeforeSwapStart))]
+    internal static class Patch_PlayerPipeline_OnBeforeSwapStart
     {
         [HarmonyPostfix]
-        static void Postfix(DiscardSwap __instance, bool value)
+        static void Postfix(ref OnBeforeSwapStartOutput __result)
         {
-            if (!value) return;
             int bonus = Plugin.Cfg.ExtraDrawsPerTurn.Value;
-            if (bonus <= 0) return;
-            try
+            if (bonus > 0 && __result != null)
             {
-                __instance._limitCount += bonus;
-                Plugin.Log.LogInfo($"[DiscardSwap] set_IsActive -> _limitCount = {__instance._limitCount}");
-            }
-            catch (Exception ex)
-            {
-                Plugin.Log.LogError($"[DiscardSwap] set_IsActive error: {ex.Message}");
+                __result.AddSwapCount += bonus;
+                Plugin.Log.LogInfo($"[PlayerPipeline] OnBeforeSwapStart -> AddSwapCount = {__result.AddSwapCount}");
             }
         }
     }
 
     /// <summary>
-    /// Expands DiscardSwap._limitCount dynamically on all overloads of DiscardSwap.Enable.
+    /// Increases initial hand swap tile count in opening hand deal.
     /// </summary>
-    [HarmonyPatch]
-    internal static class Patch_DiscardSwap_Enable
+    [HarmonyPatch(typeof(PlayerHandPaiMianContainer), "get_InitSwapTotal")]
+    internal static class Patch_PlayerHandPaiMianContainer_InitSwapTotal
     {
-        static IEnumerable<MethodBase> TargetMethods()
-        {
-            foreach (var m in AccessTools.GetDeclaredMethods(typeof(DiscardSwap)))
-            {
-                if (m.Name == "Enable")
-                    yield return m;
-            }
-        }
-
         [HarmonyPostfix]
-        static void Postfix(DiscardSwap __instance)
+        static void Postfix(ref int __result)
         {
             int bonus = Plugin.Cfg.ExtraDrawsPerTurn.Value;
-            if (bonus <= 0) return;
-            try
+            if (bonus > 0)
             {
-                __instance._limitCount += bonus;
-                Plugin.Log.LogInfo($"[DiscardSwap] Enable -> _limitCount = {__instance._limitCount}");
-            }
-            catch (Exception ex)
-            {
-                Plugin.Log.LogError($"[DiscardSwap] Enable error: {ex.Message}");
+                __result += bonus;
             }
         }
     }
 
     // =====================================================================================
-    //  SECTION 2: Total Draws / Swaps Per Round Patches
+    //  MECHANIC 2: Total Draws Per Round (ExtraTotalDraws)
     // =====================================================================================
 
     /// <summary>
-    /// Increases total draw allowance when the round swap counter is initialized (PlayerSwapPaiLeftCount.InitTotalCount).
+    /// Boosts round swap counter initialization both prefix and postfix.
     /// </summary>
     [HarmonyPatch(typeof(PlayerSwapPaiLeftCount), nameof(PlayerSwapPaiLeftCount.InitTotalCount))]
     internal static class Patch_PlayerSwapPaiLeftCount_InitTotalCount
     {
+        [HarmonyPrefix]
+        static void Prefix(ref int totalCount)
+        {
+            int extra = Plugin.Cfg.ExtraTotalDraws.Value;
+            if (extra > 0)
+            {
+                totalCount += extra;
+                Plugin.Log.LogInfo($"[PlayerSwapPaiLeftCount] InitTotalCount boosted: totalCount -> {totalCount}");
+            }
+        }
+
         [HarmonyPostfix]
         static void Postfix(PlayerSwapPaiLeftCount __instance)
         {
@@ -260,60 +227,51 @@ namespace DemonicMahjongMod
                 __instance.AddTotalCount(extra, false);
                 __instance.AddLeftCount(extra, false);
                 __instance.UpdateText(false);
-                Plugin.Log.LogInfo($"[PlayerSwapPaiLeftCount] Boosted total draws by +{extra} (Total: {__instance._totalCount}, Left: {__instance.SwapPaiLeftCount})");
+                Plugin.Log.LogInfo($"[PlayerSwapPaiLeftCount] Boosted total draws (Total: {__instance._totalCount}, Left: {__instance.SwapPaiLeftCount})");
             }
             catch (Exception ex)
             {
-                Plugin.Log.LogError($"[PlayerSwapPaiLeftCount] InitTotalCount error: {ex.Message}");
+                Plugin.Log.LogError($"[PlayerSwapPaiLeftCount] InitTotalCount postfix error: {ex.Message}");
             }
         }
     }
 
     /// <summary>
-    /// Ensures draw counter remains topped off when swap counter component is re-enabled (PlayerSwapPaiLeftCount.OnEnable).
+    /// Ensures UI left count getter always reflects the boosted total.
     /// </summary>
-    [HarmonyPatch(typeof(PlayerSwapPaiLeftCount), nameof(PlayerSwapPaiLeftCount.OnEnable))]
-    internal static class Patch_PlayerSwapPaiLeftCount_OnEnable
+    [HarmonyPatch(typeof(PlayerSwapPaiLeftCount), "get_SwapPaiLeftCount")]
+    internal static class Patch_PlayerSwapPaiLeftCount_SwapPaiLeftCount
     {
         [HarmonyPostfix]
-        static void Postfix(PlayerSwapPaiLeftCount __instance)
+        static void Postfix(ref int __result)
         {
             int extra = Plugin.Cfg.ExtraTotalDraws.Value;
-            if (extra <= 0) return;
-            try
+            if (extra > 0)
             {
-                if (__instance._totalCount > 0 && __instance.SwapPaiLeftCount < __instance._totalCount)
-                {
-                    __instance.SwapPaiLeftCount = __instance._totalCount;
-                    __instance.UpdateText(false);
-                }
+                __result += extra;
             }
-            catch { }
         }
     }
 
     /// <summary>
-    /// Freezes remaining draw/swap count if InfiniteDraws is toggled on (PlayerSwapPaiLeftCount.AddLeftCount).
+    /// Ensures swap container left count getter reflects the boosted total.
     /// </summary>
-    [HarmonyPatch(typeof(PlayerSwapPaiLeftCount), nameof(PlayerSwapPaiLeftCount.AddLeftCount))]
-    internal static class Patch_PlayerSwapPaiLeftCount_AddLeftCount
+    [HarmonyPatch(typeof(PlayerSwapPaiMianContainer), "get_SwapPaiLeftCount")]
+    internal static class Patch_PlayerSwapPaiMianContainer_SwapPaiLeftCount
     {
-        [HarmonyPrefix]
-        static bool Prefix(PlayerSwapPaiLeftCount __instance, int leftCount)
+        [HarmonyPostfix]
+        static void Postfix(ref int __result)
         {
-            if (Plugin.Cfg.InfiniteDraws.Value && leftCount < 0)
+            int extra = Plugin.Cfg.ExtraTotalDraws.Value;
+            if (extra > 0)
             {
-                __instance.SwapPaiLeftCount = __instance._totalCount;
-                __instance.UpdateText(false);
-                Plugin.Log.LogDebug("[PlayerSwapPaiLeftCount] Blocked draw/swap decrement (InfiniteDraws active)");
-                return false; // Skip decrement
+                __result += extra;
             }
-            return true;
         }
     }
 
     /// <summary>
-    /// Boosts initial round swap count queried by player pipeline (PlayerPipeline.OnBeforeInitSwap).
+    /// Boosts initial round swap count queried by player pipeline.
     /// </summary>
     [HarmonyPatch(typeof(PlayerPipeline), nameof(PlayerPipeline.OnBeforeInitSwap))]
     internal static class Patch_PlayerPipeline_OnBeforeInitSwap
@@ -325,13 +283,12 @@ namespace DemonicMahjongMod
             if (extra > 0)
             {
                 __result += extra;
-                Plugin.Log.LogDebug($"[PlayerPipeline] OnBeforeInitSwap boosted -> {__result}");
             }
         }
     }
 
     /// <summary>
-    /// Extends remaining turn count in round statistics (InRoundStatistics.GetLeftTurnCount).
+    /// Extends remaining turn count in round statistics to prevent early round end.
     /// </summary>
     [HarmonyPatch(typeof(InRoundStatistics), nameof(InRoundStatistics.GetLeftTurnCount))]
     internal static class Patch_InRoundStatistics_GetLeftTurnCount
@@ -347,59 +304,36 @@ namespace DemonicMahjongMod
         }
     }
 
-    /// <summary>
-    /// Expands the tile wall / deck capacity on initialization (AllPaiMianContainer.Init).
-    /// </summary>
-    [HarmonyPatch(typeof(AllPaiMianContainer), nameof(AllPaiMianContainer.Init))]
-    internal static class Patch_AllPaiMianContainer_Init
-    {
-        [HarmonyPostfix]
-        static void Postfix(AllPaiMianContainer __instance)
-        {
-            int extra = Plugin.Cfg.ExtraDeckTiles.Value;
-            if (extra <= 0) return;
-            try
-            {
-                __instance._fullCount += extra;
-                Plugin.Log.LogInfo($"[AllPaiMianContainer] Deck capacity boosted: _fullCount -> {__instance._fullCount}");
-            }
-            catch (Exception ex)
-            {
-                Plugin.Log.LogError($"[AllPaiMianContainer] Init error: {ex.Message}");
-            }
-        }
-    }
-
     // =====================================================================================
-    //  SECTION 3: Hu Slot Patches
+    //  MECHANIC 3: Hu Slots (BonusHuSlots)
     // =====================================================================================
 
     /// <summary>
-    /// Dynamically instantiates additional Hu slots and updates CaoWei UI right after initialization (HuPaiSlots.OnInitFinished).
+    /// Dynamically expands physical Hu slots when a round starts.
     /// </summary>
-    [HarmonyPatch(typeof(HuPaiSlots), nameof(HuPaiSlots.OnInitFinished))]
-    internal static class Patch_HuPaiSlots_OnInitFinished
+    [HarmonyPatch(typeof(PlayerPipeline), nameof(PlayerPipeline.OnMaJiangRoundStart))]
+    internal static class Patch_PlayerPipeline_OnMaJiangRoundStart
     {
         [HarmonyPostfix]
-        static void Postfix(HuPaiSlots __instance)
+        static void Postfix(PlayerPipeline __instance)
         {
             int bonus = Plugin.Cfg.BonusHuSlots.Value;
             if (bonus <= 0) return;
             try
             {
-                Plugin.Log.LogInfo($"[HuPaiSlots] Calling DynamicChangeSlotsCountDelta(+{bonus})...");
+                Plugin.Log.LogInfo($"[PlayerPipeline] OnMaJiangRoundStart: Expanding Hu slots by +{bonus}...");
                 __instance.DynamicChangeSlotsCountDelta(bonus);
-                Plugin.Log.LogInfo($"[HuPaiSlots] Hu slots successfully expanded! Total slots: {__instance.GetTotalCount()}");
+                Plugin.Log.LogInfo($"[PlayerPipeline] Hu slots expanded! Current count: {__instance.OnHuPaiSlotsCount()}");
             }
             catch (Exception ex)
             {
-                Plugin.Log.LogError($"[HuPaiSlots] Failed to expand Hu slots: {ex.Message}");
+                Plugin.Log.LogError($"[PlayerPipeline] OnMaJiangRoundStart error: {ex.Message}");
             }
         }
     }
 
     /// <summary>
-    /// Boosts player pipeline query for Hu slot capacity (PlayerPipeline.OnHuPaiSlotsCount).
+    /// Boosts player pipeline query for Hu slot capacity.
     /// </summary>
     [HarmonyPatch(typeof(PlayerPipeline), nameof(PlayerPipeline.OnHuPaiSlotsCount))]
     internal static class Patch_PlayerPipeline_OnHuPaiSlotsCount
@@ -411,81 +345,41 @@ namespace DemonicMahjongMod
             if (bonus > 0)
             {
                 __result += bonus;
-                Plugin.Log.LogDebug($"[PlayerPipeline] OnHuPaiSlotsCount boosted -> {__result}");
-            }
-        }
-    }
-
-    // =====================================================================================
-    //  SECTION 4: UI & Character Stat Display Synchronization (Bag / PlayerInfoCtr)
-    // =====================================================================================
-
-    /// <summary>
-    /// Synchronizes the character bag / status inspect screen with the boosted draw and slot values (PlayerInfoCtr.Refresh).
-    /// </summary>
-    [HarmonyPatch(typeof(PlayerInfoCtr), nameof(PlayerInfoCtr.Refresh))]
-    internal static class Patch_PlayerInfoCtr_Refresh
-    {
-        [HarmonyPostfix]
-        static void Postfix(PlayerInfoCtr __instance)
-        {
-            try
-            {
-                int extraDraws = Plugin.Cfg.ExtraDrawsPerTurn.Value;
-                if (extraDraws > 0)
-                {
-                    __instance._moPaiNum += extraDraws;
-                }
-
-                int extraTotal = Plugin.Cfg.ExtraTotalDraws.Value;
-                if (extraTotal > 0)
-                {
-                    __instance._totalPaiNum += extraTotal;
-                }
-
-                int bonusSlots = Plugin.Cfg.BonusHuSlots.Value;
-                if (bonusSlots > 0)
-                {
-                    __instance._slotsCount += bonusSlots;
-                }
-            }
-            catch (Exception ex)
-            {
-                Plugin.Log.LogError($"[PlayerInfoCtr] Refresh UI error: {ex.Message}");
             }
         }
     }
 
     /// <summary>
-    /// Synchronizes the character inspect screen in out-game / shop view (PlayerInfoCtr.RefreshOutGame).
+    /// Ensures HuPaiSlots.GetTotalCount reflects the bonus slots.
     /// </summary>
-    [HarmonyPatch(typeof(PlayerInfoCtr), nameof(PlayerInfoCtr.RefreshOutGame))]
-    internal static class Patch_PlayerInfoCtr_RefreshOutGame
+    [HarmonyPatch(typeof(HuPaiSlots), nameof(HuPaiSlots.GetTotalCount))]
+    internal static class Patch_HuPaiSlots_GetTotalCount
     {
         [HarmonyPostfix]
-        static void Postfix(PlayerInfoCtr __instance)
+        static void Postfix(ref int __result)
         {
-            try
+            int bonus = Plugin.Cfg.BonusHuSlots.Value;
+            if (bonus > 0)
             {
-                int extraDraws = Plugin.Cfg.ExtraDrawsPerTurn.Value;
-                if (extraDraws > 0)
-                {
-                    __instance._moPaiNum += extraDraws;
-                }
-
-                int extraTotal = Plugin.Cfg.ExtraTotalDraws.Value;
-                if (extraTotal > 0)
-                {
-                    __instance._totalPaiNum += extraTotal;
-                }
-
-                int bonusSlots = Plugin.Cfg.BonusHuSlots.Value;
-                if (bonusSlots > 0)
-                {
-                    __instance._slotsCount += bonusSlots;
-                }
+                __result += bonus;
             }
-            catch { }
+        }
+    }
+
+    /// <summary>
+    /// Ensures HuPaiSlots.GetLeftCount reflects the bonus slots.
+    /// </summary>
+    [HarmonyPatch(typeof(HuPaiSlots), nameof(HuPaiSlots.GetLeftCount))]
+    internal static class Patch_HuPaiSlots_GetLeftCount
+    {
+        [HarmonyPostfix]
+        static void Postfix(ref int __result)
+        {
+            int bonus = Plugin.Cfg.BonusHuSlots.Value;
+            if (bonus > 0)
+            {
+                __result += bonus;
+            }
         }
     }
 }

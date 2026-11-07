@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyDescriptionAttribute("BepInEx 6 IL2CPP Harmony mod for Demonic Mahjong v2.70.0")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+4c3eaf6abc41944c279e5fa6e841bbf7a2cd6dc1")]
 [assembly: System.Reflection.AssemblyProductAttribute("DemonicMahjongMod")]
 [assembly: System.Reflection.AssemblyTitleAttribute("DemonicMahjongMod")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

@@ -10,3 +10,4 @@ C:\Users\Gordo\Documents\test\MaJiang\ModProject\DemonicMahjongMod\obj\Release\n
 C:\Users\Gordo\Documents\test\MaJiang\ModProject\DemonicMahjongMod\obj\Release\net6.0\refint\DemonicMahjongMod.dll
 C:\Users\Gordo\Documents\test\MaJiang\ModProject\DemonicMahjongMod\obj\Release\net6.0\DemonicMahjongMod.pdb
 C:\Users\Gordo\Documents\test\MaJiang\ModProject\DemonicMahjongMod\obj\Release\net6.0\ref\DemonicMahjongMod.dll
+C:\Users\Gordo\Documents\test\MaJiang\ModProject\DemonicMahjongMod\obj\Release\net6.0\DemonicMahjongMod.sourcelink.json
