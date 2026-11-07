@@ -1,0 +1,96 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Platforms>x64</Platforms>
+    <AssemblyName>DemonicMahjongMod</AssemblyName>
+    <RootNamespace>DemonicMahjongMod</RootNamespace>
+    <Description>BepInEx 6 IL2CPP Harmony mod for Demonic Mahjong v2.70.0</Description>
+    <NoWarn>CS1591;CS8600;CS8602;CS8603;CS8604;CS8625;CS0108</NoWarn>
+  </PropertyGroup>
+
+  <!-- ===================================================================
+       Game & BepInEx directory configuration.
+       Can be overridden via command-line: dotnet build -p:GameDir="<Path>"
+       =================================================================== -->
+  <PropertyGroup>
+    <GameDir Condition="'$(GameDir)' == ''">C:\Users\Gordo\Downloads\Demonic.Mahjong.build.26325171\Demonic Mahjong Soundtrack Bundle\DemonicMahjong</GameDir>
+    <BepInExCoreDir Condition="'$(BepInExCoreDir)' == ''">$(GameDir)\BepInEx\core</BepInExCoreDir>
+    <BepInExInteropDir Condition="'$(BepInExInteropDir)' == ''">$(GameDir)\BepInEx\interop</BepInExInteropDir>
+    <WorkspaceInteropDir>$(MSBuildProjectDirectory)\..\..\interop</WorkspaceInteropDir>
+    <ActualInteropDir Condition="Exists('$(BepInExInteropDir)\MaJiang.dll')">$(BepInExInteropDir)</ActualInteropDir>
+    <ActualInteropDir Condition="'$(ActualInteropDir)' == ''">$(WorkspaceInteropDir)</ActualInteropDir>
+  </PropertyGroup>
+
+  <!-- ===== BepInEx Core & IL2CPP Dependencies ===== -->
+  <ItemGroup>
+    <Reference Include="BepInEx.Core">
+      <HintPath>$(BepInExCoreDir)\BepInEx.Core.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="BepInEx.Unity.IL2CPP">
+      <HintPath>$(BepInExCoreDir)\BepInEx.Unity.IL2CPP.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="BepInEx.Unity.Common">
+      <HintPath>$(BepInExCoreDir)\BepInEx.Unity.Common.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>$(BepInExCoreDir)\0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Il2CppInterop.Runtime">
+      <HintPath>$(BepInExCoreDir)\Il2CppInterop.Runtime.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Il2CppInterop.Common">
+      <HintPath>$(BepInExCoreDir)\Il2CppInterop.Common.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="MonoMod.Utils">
+      <HintPath>$(BepInExCoreDir)\MonoMod.Utils.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- ===== Game IL2CPP Interop Assemblies ===== -->
+  <ItemGroup>
+    <Reference Include="MaJiang">
+      <HintPath>$(ActualInteropDir)\MaJiang.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Il2Cppmscorlib">
+      <HintPath>$(ActualInteropDir)\Il2Cppmscorlib.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Il2CppSystem">
+      <HintPath>$(ActualInteropDir)\Il2CppSystem.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath>$(ActualInteropDir)\UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(ActualInteropDir)\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SaintsField.Runtime">
+      <HintPath>$(ActualInteropDir)\SaintsField.Runtime.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- ===== Auto-copy built DLL to BepInEx plugins folder (if target exists) ===== -->
+  <Target Name="CopyToPlugins" AfterTargets="Build" Condition="Exists('$(GameDir)\BepInEx\plugins')">
+    <MakeDir Directories="$(GameDir)\BepInEx\plugins\$(AssemblyName)" />
+    <Copy SourceFiles="$(OutputPath)$(AssemblyName).dll"
+          DestinationFolder="$(GameDir)\BepInEx\plugins\$(AssemblyName)"
+          SkipUnchangedFiles="true"
+          ContinueOnError="true" />
+  </Target>
+
+</Project>

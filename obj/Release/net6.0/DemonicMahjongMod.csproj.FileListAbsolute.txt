@@ -1,0 +1,12 @@
+C:\Users\Gordo\Documents\test\MaJiang\ModProject\DemonicMahjongMod\obj\Release\net6.0\DemonicMahjongMod.csproj.AssemblyReference.cache
+C:\Users\Gordo\Documents\test\MaJiang\ModProject\DemonicMahjongMod\obj\Release\net6.0\DemonicMahjongMod.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Gordo\Documents\test\MaJiang\ModProject\DemonicMahjongMod\obj\Release\net6.0\DemonicMahjongMod.AssemblyInfoInputs.cache
+C:\Users\Gordo\Documents\test\MaJiang\ModProject\DemonicMahjongMod\obj\Release\net6.0\DemonicMahjongMod.AssemblyInfo.cs
+C:\Users\Gordo\Documents\test\MaJiang\ModProject\DemonicMahjongMod\obj\Release\net6.0\DemonicMahjongMod.csproj.CoreCompileInputs.cache
+C:\Users\Gordo\Documents\test\MaJiang\ModProject\DemonicMahjongMod\bin\Release\net6.0\DemonicMahjongMod.deps.json
+C:\Users\Gordo\Documents\test\MaJiang\ModProject\DemonicMahjongMod\bin\Release\net6.0\DemonicMahjongMod.dll
+C:\Users\Gordo\Documents\test\MaJiang\ModProject\DemonicMahjongMod\bin\Release\net6.0\DemonicMahjongMod.pdb
+C:\Users\Gordo\Documents\test\MaJiang\ModProject\DemonicMahjongMod\obj\Release\net6.0\DemonicMahjongMod.dll
+C:\Users\Gordo\Documents\test\MaJiang\ModProject\DemonicMahjongMod\obj\Release\net6.0\refint\DemonicMahjongMod.dll
+C:\Users\Gordo\Documents\test\MaJiang\ModProject\DemonicMahjongMod\obj\Release\net6.0\DemonicMahjongMod.pdb
+C:\Users\Gordo\Documents\test\MaJiang\ModProject\DemonicMahjongMod\obj\Release\net6.0\ref\DemonicMahjongMod.dll
